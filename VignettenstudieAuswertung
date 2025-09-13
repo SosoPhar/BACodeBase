@@ -1,0 +1,246 @@
+# Auswertung A (Kontrolle), B (Wort-für-Wort), C (Wort-für-Wort + Dynamic Delay)
+# Zweiseitige Welch-t-Tests paarweise: A-B, A-C, B-C
+# Speichert Ergebnisse als CSV.
+
+import re
+import math
+from pathlib import Path
+import numpy as np
+import pandas as pd
+from scipy import stats
+from difflib import get_close_matches
+
+# ================== Optionen ==================
+FILTER_LANGUAGE = None         # z.B. "German" oder None (kein Filter)
+TEST_ALTERNATIVE = 'less' # 'two-sided' empfohlen
+ALPHA = 0.05
+USE_FUZZY_MATCH = True         # True = tolerantes Matching der Spaltennamen
+OUT_DIR = Path("/mnt/data")
+# ==============================================
+
+print("\n=== Einstellungen ===")
+print(f"Sprache-Filter: {FILTER_LANGUAGE if FILTER_LANGUAGE else 'Alle'}")
+tail_label = {
+    'two-sided': 'zweiseitig',
+    'less': 'einseitig (A < B usw.)',
+    'greater': 'einseitig (A > B usw.)'
+}[TEST_ALTERNATIVE]
+print(f"\n=== Welch-t-Tests ({tail_label}), paarweise A-B, A-C, B-C ===")
+print(f"Alpha: {ALPHA}\n")
+
+# ---- 1. Dateien ----
+file_a = r"C:\Users\sosos\Documents\UniStuff\Bachelor\UmfrageOnline\Vinette\UmfrageOnline-Beantwortungen-(BlockText)A.xlsx"
+file_b = r"C:\Users\sosos\Documents\UniStuff\Bachelor\UmfrageOnline\Vinette\UmfrageOnline-Beantwortungen-(WortFürWort)B.xlsx"
+file_c = r"C:\Users\sosos\Documents\UniStuff\Bachelor\UmfrageOnline\Vinette\UmfrageOnline-Beantwortungen-(WortFürWort+dynamicDelay)C.xlsx"
+
+# ---- 2. Laden ----
+def read_with_fallback(path):
+    xl = pd.ExcelFile(path)
+    sheet = "Beantwortungen" if "Beantwortungen" in xl.sheet_names else xl.sheet_names[0]
+    return xl.parse(sheet_name=sheet)
+
+def clean_cols(df):
+    df.columns = [re.sub(r'\s+', ' ', c.replace('\u00A0', ' ')).strip() for c in df.columns]
+    return df
+
+df_a = clean_cols(read_with_fallback(file_a))
+df_b = clean_cols(read_with_fallback(file_b))
+df_c = clean_cols(read_with_fallback(file_c))
+
+# ---- 3. Ziel-Items ----
+ALTER_COLUMN = "Wie alt sind Sie?"
+comfortable_col = "Wie haben Sie die Konversation mit dem Coaching-Chatbot wahrgenommen?"
+
+humanness_cols = [
+    "Wie haben Sie die Menschlichkeit des Coaching-Chatbots wahrgenommen?",
+    "Wie haben Sie die Gesprächsfähigkeit des Coaching-Chatbots wahrgenommen?",
+    "Wie haben Sie die Bedachtheit des Coaching-Chatbots wahrgenommen?",
+    "Wie haben Sie die Höflichkeit des Coaching-Chatbots wahrgenommen?",
+    "Wie haben Sie das Antwortverhalten des Coaching-Chatbots wahrgenommen?",
+    "Wie haben Sie die Interaktion mit dem Coaching-Chatbot wahrgenommen?",
+]
+
+social_cols = [
+    "Ich hatte das Gefühl, mit dem Coaching-Chatbot einen menschlichen Kontakt zu haben.",
+    "Ich hatte das Gefühl, mit dem Coaching-Chatbot eine persönliche Beziehung zu haben.",
+    "Ich hatte das Gefühl, mit dem Coaching-Chatbot eine gesellige Beziehung zu haben.",
+    "Ich hatte das Gefühl, mit dem Coaching-Chatbot menschliche Wärme zu spüren.",
+    "Ich hatte das Gefühl, mit dem Coaching-Chatbot menschliche Sensibilität zu spüren.",
+]
+
+satisfaction_cols = [
+    "Wie zufrieden sind Sie mit der allgemeinen Interaktion mit dem Chatbot?",
+    "Wie zufrieden sind Sie mit den Ratschlägen des Chatbots?",
+    "Wie zufrieden sind Sie mit der Art, wie der Chatbot Sie behandelt hat?",
+]
+
+chatbotuse_cols = [
+    "Wie häufig nutzen Sie Chatbots ?",
+    "Wie häufig haben Sie schon Chatbot-Coaching genutzt?",
+]
+
+ALL_ITEMS = [ALTER_COLUMN, comfortable_col] + humanness_cols + social_cols + satisfaction_cols + chatbotuse_cols
+
+# ---- 4. Mapping ----
+def map_columns(df, wanted, use_fuzzy=True):
+    found = {}
+    pool = list(df.columns)
+    norm_pool = {re.sub(r'\s+', ' ', c.strip().lower()): c for c in pool}
+    for w in wanted:
+        if w in df.columns:
+            found[w] = w
+        else:
+            norm_w = re.sub(r'\s+', ' ', w.strip().lower())
+            if norm_w in norm_pool:
+                found[w] = norm_pool[norm_w]
+            elif use_fuzzy:
+                cand = get_close_matches(w, pool, n=1, cutoff=0.75)
+                if cand:
+                    found[w] = cand[0]
+                else:
+                    found[w] = None
+            else:
+                found[w] = None
+    return found
+
+maps_a = map_columns(df_a, ALL_ITEMS)
+maps_b = map_columns(df_b, ALL_ITEMS)
+maps_c = map_columns(df_c, ALL_ITEMS)
+
+def to_num(s):
+    return pd.to_numeric(s, errors='coerce')
+
+def mean_scale(df, mapping, cols):
+    real = [mapping[c] for c in cols if mapping.get(c)]
+    return df[real].apply(to_num).mean(axis=1) if real else pd.Series([np.nan]*len(df))
+
+def single_item(df, mapping, col):
+    real = mapping.get(col)
+    return to_num(df[real]) if real and real in df.columns else pd.Series([np.nan]*len(df))
+
+def add_scales(df, mapping):
+    out = df.copy()
+    out["humanness"]    = mean_scale(out, mapping, humanness_cols)
+    out["social"]       = mean_scale(out, mapping, social_cols)
+    out["satisfaction"] = mean_scale(out, mapping, satisfaction_cols)
+    out["chatbotuse"]   = mean_scale(out, mapping, chatbotuse_cols)
+    out["comfortable"]  = single_item(out, mapping, comfortable_col)
+    return out
+
+dfa = add_scales(df_a, maps_a)
+dfb = add_scales(df_b, maps_b)
+dfc = add_scales(df_c, maps_c)
+
+# ---- 5. Welch-Tests + SE ----
+def hedges_g_from_samples(x, y):
+    x, y = map(lambda s: np.asarray(s.dropna(), float), (x, y))
+    nx, ny = len(x), len(y)
+    if nx < 2 or ny < 2: return np.nan
+    sx2, sy2 = x.var(ddof=1), y.var(ddof=1)
+    sp = math.sqrt(((nx-1)*sx2 + (ny-1)*sy2)/(nx+ny-2))
+    d = (x.mean() - y.mean()) / sp if sp else np.nan
+    J = 1 - (3/(4*(nx+ny)-9)) if (nx+ny) > 2 else 1
+    return d * J
+
+def welch_test(x, y, alternative='two-sided'):
+    return stats.ttest_ind(x, y, equal_var=False, nan_policy="omit", alternative=alternative)
+
+def se_mean(series: pd.Series) -> float:
+    s = series.dropna().astype(float)
+    n = len(s)
+    if n == 0:
+        return np.nan
+    sd = s.std(ddof=1)
+    return sd / math.sqrt(n) if n > 0 else np.nan
+
+def se_diff(x: pd.Series, y: pd.Series) -> float:
+    ax, ay = x.dropna().astype(float), y.dropna().astype(float)
+    n1, n2 = len(ax), len(ay)
+    if n1 < 2 or n2 < 2:
+        return np.nan
+    sd1, sd2 = ax.std(ddof=1), ay.std(ddof=1)
+    return math.sqrt((sd1**2)/n1 + (sd2**2)/n2)
+
+pairs = [("A", "B", dfa, dfb), ("A", "C", dfa, dfc), ("B", "C", dfb, dfc)]
+vars_to_test = [
+    ("Perceived Humanness", "humanness"),
+    ("Social Presence", "social"),
+    ("Satisfaction", "satisfaction"),
+    ("Chatbot-Nutzung", "chatbotuse"),
+    ("Komfort (Single)", "comfortable"),
+]
+
+rows = []
+for label, col in vars_to_test:
+    for g1, g2, X, Y in pairs:
+        a, b = X[col].dropna(), Y[col].dropna()
+        t_res = welch_test(a, b, TEST_ALTERNATIVE)
+        t, p = t_res.statistic, t_res.pvalue
+        g = hedges_g_from_samples(a, b)
+
+        n1, n2 = len(a), len(b)
+        m1, m2 = a.mean(), b.mean()
+        sd1, sd2 = a.std(ddof=1), b.std(ddof=1)
+        se1, se2 = (sd1 / math.sqrt(n1) if n1 > 0 else np.nan,
+                    sd2 / math.sqrt(n2) if n2 > 0 else np.nan)
+        se_d = se_diff(a, b)
+
+        rows.append({
+            "Variable": label,
+            "Vergleich": f"{g1} vs {g2}",
+            f"N_{g1}": n1, f"M_{g1}": m1, f"SD_{g1}": sd1, f"SE_{g1}": se1,
+            f"N_{g2}": n2, f"M_{g2}": m2, f"SD_{g2}": sd2, f"SE_{g2}": se2,
+            "SE_Diff": se_d,
+            "t (Welch)": t, f"p ({tail_label})": p, "Hedges_g": g
+        })
+
+res = pd.DataFrame(rows)
+print("\n=== Welch-t-Tests ===")
+print(res.to_string(index=False, float_format=lambda x: f"{x:.3f}"))
+
+# ---- 6. Deskriptive Übersicht ----
+desc = []
+for label, col in vars_to_test:
+    for g, df in [("A", dfa), ("B", dfb), ("C", dfc)]:
+        s = df[col].dropna()
+        desc.append({
+            "Variable": label,
+            "Gruppe": g,
+            "n": len(s),
+            "M": s.mean(),
+            "SD": s.std(ddof=1),
+            "SE": se_mean(s)
+        })
+desc = pd.DataFrame(desc).sort_values(["Variable", "Gruppe"])
+print("\n=== Deskriptive Statistik ===")
+print(desc.to_string(index=False, float_format=lambda x: f"{x:.3f}"))
+
+# ---- 7. Demographische Übersicht ----
+def report_demographics(dfs, labels):
+    rows = []
+    for df, label in zip(dfs, labels):
+        age = to_num(df[maps_a[ALTER_COLUMN]]) if maps_a.get(ALTER_COLUMN) else pd.Series([np.nan]*len(df))
+        chatbot = to_num(df[maps_a[chatbotuse_cols[0]]]) if maps_a.get(chatbotuse_cols[0]) else pd.Series([np.nan]*len(df))
+        coaching = to_num(df[maps_a[chatbotuse_cols[1]]]) if maps_a.get(chatbotuse_cols[1]) else pd.Series([np.nan]*len(df))
+        rows.append({
+            "Gruppe": label,
+            "M_Alter": age.mean(),
+            "SD_Alter": age.std(ddof=1),
+            "n_Chatbot Nutzung": chatbot.notna().sum(),
+            "n_Coaching Nutzung": coaching.notna().sum()
+        })
+    return pd.DataFrame(rows)
+
+demo = report_demographics([df_a, df_b, df_c], ["A", "B", "C"])
+print("\n=== Demographische Übersicht ===")
+print(demo.to_string(index=False, float_format=lambda x: f"{x:.2f}"))
+
+# ---- 8. Speichern ----
+OUT_DIR.mkdir(parents=True, exist_ok=True)
+res.to_csv(OUT_DIR / "ttests_welch_AB_AC_BC.csv", index=False)
+desc.to_csv(OUT_DIR / "deskriptiv_AB_C.csv", index=False)
+demo.to_csv(OUT_DIR / "demographie_AB_C.csv", index=False)
+print("\nGespeichert:")
+print(f"- {OUT_DIR / 'ttests_welch_AB_AC_BC.csv'}")
+print(f"- {OUT_DIR / 'deskriptiv_AB_C.csv'}")
+print(f"- {OUT_DIR / 'demographie_AB_C.csv'}")
