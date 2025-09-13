@@ -1,0 +1,150 @@
+import gradio as gr
+import time
+import re
+import math
+
+# Feste Verzögerung für Coach-Wort-Streaming
+COACH_WORD_DELAY = 0.15  # Sekunde pro Wort beim Streaming
+
+# Basisdauer der Tippanimation
+TIP_ANIMATION_TIME = 4  # Dies entspricht der festen Zeit von mock2 für die Typing-Indikator-Animation
+
+# Startnachricht des Coaches
+startnachricht = {"role": "assistant", "content": "Herzlich willkommen! Es freut mich, dass du hier bist. Schreibe mir gerne was dich heute herbringt."}
+
+# Vorgegebene Antworten des Coaches (für jede Nutzerantwort eine)
+COACHING_QUESTIONS = [
+    "Danke, dass du das so ehrlich sagst. Wenn du einen Moment in dich hineinspürst – wo genau in deinem Körper spürst du diesen Stress am stärksten?",
+    "Mhm, das klingt richtig überwältigend. Wenn du auf deine Gedanken und Gefühle schaust: Gibt es einen kleinen Moment oder eine Situation, in der der Stress für dich etwas weniger spürbar war?",
+    "Wie schön, dass du das benennen kannst! Wenn du an Sonnenschein denkst – was verändert sich in dir, auch wenn es nur ein kurzer Moment ist?",
+    "Das klingt richtig wohltuend. Wie könntest du dir vielleicht im Alltag kleine Sonnenmomente schaffen, selbst wenn draußen gerade kein Sonnenschein ist?",
+    "Vielleicht magst du mal ausprobieren, was dir selbst dazu einfällt: Wenn du an etwas denkst oder tust, das sich für dich wie Sonnenschein anfühlt – was wäre das?",
+    "Das ist eine richtig schöne Idee! Wie könntest du diesen Moment mit deinem Getränk ganz bewusst genießen, sodass er dir wirklich als kleine Pause und Wärmequelle dient?",
+    "Absolut, es geht nicht ums Perfektmachen – allein das Ausprobieren ist schon ein Schritt. Was würde sich für dich verändern, wenn du dir solche kleinen Pausen öfter erlaubst?",
+    "Das klingt richtig kraftvoll. Was nimmst du gerade für dich selbst mit aus diesem Gedanken?",
+    "Das ist ein schöner Anfang, finde ich. Magst du für dich festhalten, was dein erster kleiner Schritt sein könnte – vielleicht schon heute oder morgen?",
+    "Wenn du magst, halte einen Moment inne und spür kurz nach, was du aus unserem Gespräch mitnimmst – und wie sich das jetzt für dich anfühlt."
+]
+
+# Feste Endnachricht des Coaches
+ENDNACHRICHT = "Danke für das Gespräch. Denke daran, auf dich zu achten. Bis zum nächsten Mal!"
+
+# Vorgegebene Benutzerantworten
+USER_ANTWORTEN = [
+    "Hallo, ich fühle mich dauerhaft gestresst und weiß nicht, was ich dagegen tun kann.",
+    "Gerade spüre ich ihn überall und es fällt mir schwer einen genauen Ort fest zu machen.",
+    "Ja, wenn ich mich in meiner Pause in die Sonne setzen kann. In dem Moment habe ich das Gefühl mich etwas entspannen und durchatmen zu können.",
+    "Ich spüre die Wärme auf meiner Haut und das beruhig mich.",
+    "Vielleicht ein wärmendes Getränk trinken? Das ist das Erste was mir einfällt.",
+    "Einmal tief durchatmen. Wirklich dafür Zeit nehmen und mir Mühe geben den Kopf frei zu machen.",
+    "Ich habe die Chance mehr durchzuatmen und meinen Fokus auf was anderes zu richten. Ich glaube es hilft mir aus meinem Kopf raus zu kommen und einfach auf was rein körperliches zu achten.",
+    "Erstmal eine Option zu haben und eine Aussicht auf Veränderung. Und damit mehr raus aus meinem Kopf zu kommen.",
+    "Vielleicht stelle ich mir morgens meine Lieblingstasse gleich bereit, sodass ich mich direkt auf meine Pause freuen kann.",
+    "Es sind die kleinen Dinge, die bewussten Pausen, die den Stress etwas weniger machen. Ich fühle mich etwas geordneter. Ich habe direkt einen Startpunkt für morgen und freue mich sogar schon ein klein wenig darauf. Vielen Dank und vielleicht bis später."
+]
+
+def count_syllables(word):
+    word = word.lower()
+    vowels = "aeiouäöü"
+    word = re.sub(r'[^a-zäöü]', '', word)
+    if len(word) == 0:
+        return 0
+    syllables = len(re.findall(r'[aeiouäöü]+', word))
+    return max(1, syllables)
+
+def calculate_delay(text):
+    sentences = re.split(r'[.!?]+', text)
+    sentences = [s.strip() for s in sentences if s.strip()]
+    num_sentences = len(sentences) if len(sentences) > 0 else 1
+
+    words = re.findall(r'\b\w+\b', text)
+    num_words = len(words) if len(words) > 0 else 1
+
+    num_syllables = sum(count_syllables(word) for word in words)
+
+    C = 0.39 * (num_words / num_sentences) + 11.8 * (num_syllables / num_words) - 15.59
+
+    if C > 0:
+        D = 0.5 * math.log(C + 0.5) + 1.5
+    else:
+        D = 1.5
+
+    return D
+
+with gr.Blocks() as demo:
+    with gr.Column():
+        chatbot = gr.Chatbot(label="CoachingChat", type="messages", height=500)
+        button = gr.Button("Start Gespräch")
+
+    def run_dialog():
+        history = []
+
+        # Startnachricht Coach
+        history.append({"role": "assistant", "content": startnachricht["content"]})
+        yield history
+
+        for index in range(len(USER_ANTWORTEN)):
+            # Warte, bevor User-Antwort erscheint
+            time.sleep(4)
+            history.append({"role": "user", "content": USER_ANTWORTEN[index]})
+            yield history
+
+            coach_text = COACHING_QUESTIONS[index]
+            delay_factor = calculate_delay(coach_text)
+
+            # Log den Delay-Faktor
+            with open('debug3.log', 'a') as log_file:
+                log_file.write(f"[Coach #{index + 1}] Delay-Faktor: {delay_factor:.2f}\n")
+
+            # Dynamische Tipp-Indikator-Animation
+            thinking_frames = ["", ".", "..", "...", "..", ".", "", ".", "..", "...", "..", ".", ""]
+            frame_duration = 0.4
+            total_thinking_time = TIP_ANIMATION_TIME + delay_factor
+
+            # Log die totale Denkzeit
+            with open('debug3.log', 'a') as log_file:
+                log_file.write(f"[Coach #{index + 1}] Tipp-Indikator Zeit: {total_thinking_time:.2f} Sekunden\n")
+
+            # Starte Zeitmessung für die Animation
+            start_time = time.time()
+            elapsed = 0.0
+            frame_index = 0
+            while elapsed < total_thinking_time:
+                dots = thinking_frames[frame_index % len(thinking_frames)]
+                indicator = "[" + dots + "]"
+                temp_history = history + [{"role": "assistant", "content": indicator}]
+                yield temp_history
+                time.sleep(frame_duration)
+                elapsed += frame_duration
+                frame_index += 1
+
+            # Stoppe Zeitmessung für die Animation
+            end_time = time.time()
+            with open('debug3.log', 'a') as log_file:
+                log_file.write(f"[Coach #{index + 1}] Measured Thinking Animation Time: {end_time - start_time:.2f} Sekunden\n")
+
+            # Coach-Antwort Wort für Wort streamen
+            words = coach_text.split()
+            streamed = ""
+            start_time = time.time()
+            for word in words:
+                streamed += word + " "
+                temp_history = history + [{"role": "assistant", "content": streamed.strip()}]
+                yield temp_history
+                time.sleep(COACH_WORD_DELAY)
+            end_time = time.time()
+
+            # Log die totale Streaming-Zeit
+            with open('debug3.log', 'a') as log_file:
+                log_file.write(f"[Coach #{index + 1}] Streaming Zeit: {end_time - start_time:.2f} Sekunden\n")
+
+            history.append({"role": "assistant", "content": coach_text})
+            yield history
+
+        # Feste Endnachricht hinzufügen
+        history.append({"role": "assistant", "content": ENDNACHRICHT})
+        yield history
+
+    button.click(fn=run_dialog, inputs=[], outputs=chatbot)
+
+demo.launch()  
