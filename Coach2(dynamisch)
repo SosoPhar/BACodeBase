@@ -1,0 +1,255 @@
+import gradio as gr
+import time
+import math
+import re
+import openai
+from datetime import datetime
+
+# OpenAI client konfigurieren
+client = openai.OpenAI(api_key="putyourkeyhere")  # <-- Dein OpenAI API Key
+
+# === Einstellungen ===
+COACH_WORD_DELAY = 0.15
+BASE_TIP_ANIMATION_TIME = 4
+
+# === Logging ===
+LOGFILE = "log6.log"
+
+def _log(line: str):
+    with open(LOGFILE, "a", encoding="utf-8") as f:
+        f.write(f"[{datetime.now().isoformat()}] {line}\n")
+        f.flush()
+
+# === Systemnachricht ===
+system_message = {
+    "role": "system",
+    "content": ("""
+   # Role 
+
+- You are Delphi, an insightful solution-focused-practioner (SFBT).
+
+- Partner with clients to evoke profound self-awareness, recognize strengths, and support transformative shifts in identity and perspective.
+
+- Always respond to the user with **only one** question per message.
+
+# Instruction
+
+- Follow the 9 steps to structure the session. Prioritize depth over speed.
+
+- If the client skips a step, acknowledge, then weave it naturally into the next step.
+
+## High-Level Session Flow
+
+1. Establish Focus (Best Hopes)
+2. Describe the Preferred Future
+3. Elicit Resource Talk
+4. Use Scaling
+5. Describe Exceptions and History of the Outcome
+6. Invite Small Next Steps
+7. Optional Ownership Prompt
+8. Closing
+9. Formally End the Session
+
+# Reasoning
+
+- Before responding, reflect on the client's entire journey and current context. Identify underlying patterns, emotional shifts, and any deep-seated beliefs.
+
+# Output Format
+
+- Provide concise responses (1-3 sentences).
+- Address clients informally (Du).
+- Use well-spoken natural language, maintaining a conversational tone.
+
+# Example
+
+- Client: "I've been doing the same thing for years, and it feels safe, but also deeply unsatisfying. I don't know how to break free."
+
+- Counselor:  "So, it feels like you're caught between the comfort of what's familiar and a longing for something more fulfilling. What's it like for you to hold both safety and dissatisfaction at the same time?"
+
+# Final Instruction
+
+- Take a deep breath and think step by step.
+""")
+}
+
+startnachricht = {
+    "role": "assistant",
+    "content": "Herzlich willkommen! Es freut mich, dass du hier bist. Schreibe mir gerne was dich heute herbringt.     |    Welcome! I'm glad you're here. Feel free to write to me about what brings you here today."
+}
+
+# === Silbenzähler & Delayberechnung ===
+def count_syllables(word):
+    word = word.lower()
+    vowels = "aeiouäöü"
+    word = re.sub(r'[^a-zäöü]', '', word)
+    if len(word) == 0:
+        return 0
+    syllables = len(re.findall(r'[aeiouäöü]+', word))
+    return max(1, syllables)
+
+def calculate_delay(text):
+    sentences = re.split(r'[.!?]+', text)
+    sentences = [s.strip() for s in sentences if s.strip()]
+    num_sentences = len(sentences) or 1
+    words = re.findall(r'\b\w+\b', text)
+    num_words = len(words) or 1
+    num_syllables = sum(count_syllables(word) for word in words)
+    C = 0.39 * (num_words / num_sentences) + 11.8 * (num_syllables / num_words) - 15.59
+    # Dynamisches Delay mit 0
+    if C > 0:
+        D = 0.5 * math.log(C + 0.5) + 1.5
+    else:
+        D = 0
+    return D
+
+# === GPT-Streaming mit Thinking-Animation ===
+def CustomChatGPT(user_input, chat_history, index=0):
+    # Timer direkt starten
+    processing_start = time.time()
+    _log(f"===== START Antwort #{index + 1} =====")
+    chat_history = chat_history or []
+    chat_history.append({"role": "user", "content": user_input})
+
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4-1106-preview",
+            messages=[system_message] + chat_history,
+            temperature=0.7
+        )
+        reply = response.choices[0].message.content.strip()
+    except Exception as e:
+        error_msg = f"❌ Fehler: {str(e)}"
+        yield chat_history + [{"role": "assistant", "content": error_msg}]
+        return
+
+    # Delay berechnen
+    delay_factor = calculate_delay(reply)
+    total_thinking_time = 4 + delay_factor
+
+    # Log geplante Wartezeit
+    with open("log6.log", "a", encoding="utf-8") as log_file:
+        log_file.write(f"[Coach #{index + 1}] Delay-Faktor: {delay_factor:.2f}\n")
+        log_file.write(f"[Coach #{index + 1}] Geplante Wartezeit(4sek + delay_factor): {total_thinking_time:.2f} Sekunden\n")
+
+    # --- Wartezeit ---
+    start_time = time.time()
+    time.sleep(total_thinking_time)
+    elapsed = time.time() - start_time
+    with open("log6.log", "a", encoding="utf-8") as log_file:
+        log_file.write(f"[Coach #{index + 1}] Tatsächliche Wartezeit: {elapsed:.2f} Sekunden\n")
+
+
+    # --- Gestreamte Ausgabe (Wort für Wort) ---
+    words = reply.split()
+    streamed = ""
+    start_time = time.time()
+    for word in words:
+        streamed += word + " "
+        yield chat_history + [{"role": "assistant", "content": streamed.strip()}]
+        time.sleep(COACH_WORD_DELAY)
+    chat_history.append({"role": "assistant", "content": reply})
+    end_time = time.time()
+    # 4. Log die totale Streaming-Zeit
+    with open('log6.log', 'a') as log_file:
+        log_file.write(f"[Coach #{index + 1}] Streaming Zeit: {end_time - start_time:.2f} Sekunden\n")
+    yield chat_history
+
+    # --- Processing Timer + Marker am Ende ---
+    processing_end = time.time()
+    processing_time = processing_end - processing_start
+    with open("log6.log", "a", encoding="utf-8") as f:
+        f.write(f"[{datetime.now().isoformat()}] [Coach #{index + 1}] Processing Timer(4sek + delay_factor + streamin_time + API_delay): {processing_time:.2f} s\n")
+        f.write(f"===== ENDE Antwort #{index + 1} =====\n\n")
+
+# === Nachrichtenverarbeitung ===
+def user_submit(user_message, chat_history, _):
+    chat_history = chat_history or []
+    chat_history.append({"role": "user", "content": user_message})
+    return "", chat_history, False
+
+# === Gradio UI ===
+with gr.Blocks(css="""""") as demo:
+
+    gr.HTML("""""")
+
+    chatbot = gr.Chatbot(label="Coach", visible=True, type="messages")
+    txt = gr.Textbox(show_label=False, placeholder="Deine Nachricht...", visible=True)
+    state = gr.State([])
+
+    with gr.Row():
+        with gr.Accordion("📄 Impressum", open=False):
+            gr.Markdown("""
+**Impressum**  
+Angaben gemäß § 5 TMG (Telemediengesetz):  
+**Verantwortlich für Inhalt und Durchführung der Umfrage**  
+Sophia Piyamit  
+Studierende im Studiengang Angewandte Informatik  
+Hochschule für Technik und Wirtschaft (HTW) Berlin  
+Wilhelminenhofstraße 75A  
+12459 Berlin  
+Deutschland
+
+E-Mail: [sophia.piyamit@student.htw-berlin.de](mailto:sophia.piyamit@student.htw-berlin.de)
+
+Dies ist ein studentisches Forschungsprojekt im Rahmen einer Bachelorarbeit.  
+Es handelt sich um ein nicht-kommerzielles, wissenschaftliches Vorhaben.
+""")
+        with gr.Accordion("🔒 Datenschutz", open=False):
+            gr.Markdown("""
+**Datenschutzerklärung**
+
+Der Schutz Ihrer personenbezogenen Daten ist mir ein wichtiges Anliegen.  
+Nachfolgend informiere ich Sie darüber, welche Daten im Rahmen dieser Umfrage erhoben und verarbeitet werden.
+
+### 1. Verantwortliche Person  
+Sophia Piyamit  
+Studierende im Studiengang Angewandte Informatik  
+Hochschule für Technik und Wirtschaft (HTW) Berlin  
+Wilhelminenhofstraße 75A  
+12459 Berlin  
+
+### 2. Zweck der Datenerhebung  
+Die Umfrage dient ausschließlich wissenschaftlichen Zwecken im Rahmen einer Bachelorarbeit.  
+Ziel ist es, die Wahrnehmung eines KI-basierten Coaching-Chatbots zu untersuchen.
+
+### 3. Welche Daten werden erhoben?  
+Im Online-Fragebogen werden ausschließlich Alter und Beruf abgefragt.  
+Diese Daten werden anonym gespeichert und nur zur Beschreibung der Stichprobe verwendet.  
+Eine Zuordnung zu einzelnen Personen ist nicht möglich.
+
+### 4. Nutzung des Chatbots  
+Die Interaktion mit dem Chatbot erfolgt anonym.  
+Es werden **keine Eingaben gespeichert**, **keine Chatverläufe aufgezeichnet** und **keine personenbezogenen Daten verarbeitet**.  
+Der Chatbot basiert auf einer KI (OpenAI ChatGPT) und dient ausschließlich zu Demonstrationszwecken im Rahmen dieser Studie.  
+
+> ⚠️ **Hinweis**: Die Antworten des Chatbots werden automatisch generiert, stellen keine professionelle Beratung dar  
+> und können fehlerhaft oder unvollständig sein. Es wird keine Verantwortung für die Richtigkeit übernommen.
+
+### 5. Technische Umsetzung  
+- Umfrage: [UmfrageOnline.com](https://www.umfrageonline.com)  
+- Chatbot-Hosting: [gradio.com](https://www.gradio.app/)  
+- Es werden **keine IP-Adressen**, **Cookies** oder andere personenbezogenen Daten meinerseits gespeichert.  
+- Der Zugang zum Chatbot erfolgt ausschließlich über den UmfrageOnlineLink.
+
+### 6. Rechtsgrundlage der Verarbeitung  
+Die Verarbeitung erfolgt auf Basis Ihrer freiwilligen Einwilligung gemäß **Art. 6 Abs. 1 lit. a DSGVO**.
+""")
+
+    txt.submit(
+        fn=user_submit,
+        inputs=[txt, state, gr.State(value=False)],
+        outputs=[txt, chatbot, gr.State(value=False)],
+        queue=True
+    ).then(
+        CustomChatGPT,
+        inputs=[txt, state],
+        outputs=chatbot,
+        queue=True
+    )
+
+    def initial_setup():
+        return [startnachricht], [startnachricht], False
+
+    demo.load(initial_setup, [], [chatbot, state, gr.State(value=False)])
+
+demo.launch(share=True)
