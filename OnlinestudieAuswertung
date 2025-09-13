@@ -1,0 +1,326 @@
+import pandas as pd
+import numpy as np
+from scipy.stats import levene, ttest_ind
+from sklearn.decomposition import PCA
+import math
+
+# ================== Optionen ==================
+FILTER_LANGUAGE = (None)     # z.B. "German" oder None (kein Filter)
+RUN_CFA = True               # True = CFA rechnen (erfordert semopy)
+CFA_BY_GROUP = False         # True = CFA getrennt für A und B
+# ==============================================
+
+# ---- 1. Daten laden ----
+file_a = r"C:\Users\sosos\Documents\UniStuff\Bachelor\UmfrageOnline\Beantwortungen-Gruppe-A.xlsx"
+file_b = r"C:\Users\sosos\Documents\UniStuff\Bachelor\UmfrageOnline\Beantwortungen-Gruppe-B.xlsx"
+
+df_a = pd.read_excel(file_a, sheet_name="Beantwortungen")
+df_b = pd.read_excel(file_b, sheet_name="Beantwortungen")
+
+# Optional: nur bestimmte Sprache
+if FILTER_LANGUAGE is not None and "Sprache" in df_a.columns and "Sprache" in df_b.columns:
+    df_a = df_a[df_a["Sprache"] == FILTER_LANGUAGE].copy()
+    df_b = df_b[df_b["Sprache"] == FILTER_LANGUAGE].copy()
+
+# ---- 2. Skalen definieren ----
+chatbotuse_cols = [
+    'Wie häufig nutzen Sie Chatbots ?'
+    'Wie häug haben Sie schon Chatbot-Coaching genutzt?'
+]
+comfortable_col = [
+    'Wie haben Sie die Konversation mit dem Coaching-Chatbot wahrgenommen?'
+]
+humanness_cols = [
+    'Wie haben Sie die Menschlichkeit des Coaching-Chatbots wahrgenommen?',
+    'Wie haben Sie die Gesprächsfähigkeit des Coaching-Chatbots wahrgenommen?',
+    'Wie haben Sie die Bedachtheit des Coaching-Chatbots wahrgenommen?',
+    'Wie haben Sie die Höflichkeit des Coaching-Chatbots wahrgenommen?',
+    'Wie haben Sie das Antwortverhalten des Coaching-Chatbots wahrgenommen?',
+    'Wie haben Sie die Interaktion mit dem Coaching-Chatbot wahrgenommen?'
+]
+social_cols = [
+    'Ich hatte das Gefühl, mit dem Coaching-Chatbot einen menschlichen Kontakt zu haben.',
+    'Ich hatte das Gefühl, mit dem Coaching-Chatbot eine persönliche Beziehung zu haben.',
+    'Ich hatte das Gefühl, mit dem Coaching-Chatbot eine gesellige Beziehung zu haben.',
+    'Ich hatte das Gefühl, mit dem Coaching-Chatbot menschliche Wärme zu spüren.',
+    'Ich hatte das Gefühl, mit dem Coaching-Chatbot menschliche Sensibilität zu spüren.'
+]
+satisfaction_cols = [
+    'Wie zufrieden sind Sie mit der allgemeinen Interaktion mit dem Chatbot?',
+    'Wie zufrieden sind Sie mit den Ratschlägen des Chatbots?',
+    'Wie zufrieden sind Sie mit der Art, wie der Chatbot Sie behandelt hat?'
+]
+
+# ---- 3. Skalenmittelwerte berechnen ----
+df_a['humanness']    = df_a[humanness_cols].mean(axis=1)
+df_b['humanness']    = df_b[humanness_cols].mean(axis=1)
+df_a['social']       = df_a[social_cols].mean(axis=1)
+df_b['social']       = df_b[social_cols].mean(axis=1)
+df_a['satisfaction'] = df_a[satisfaction_cols].mean(axis=1)
+df_b['satisfaction'] = df_b[satisfaction_cols].mean(axis=1)
+
+# ---- SE-Helperfunktionen ----
+def _clean(s):
+    return pd.to_numeric(pd.Series(s).dropna(), errors='coerce').dropna()
+
+def se_mean(series: pd.Series) -> float:
+    s = _clean(series)
+    n = len(s)
+    if n == 0:
+        return np.nan
+    sd = s.std(ddof=1)
+    return sd / math.sqrt(n)
+
+def se_diff_welch(x: pd.Series, y: pd.Series) -> float:
+    a, b = _clean(x), _clean(y)
+    n1, n2 = len(a), len(b)
+    if n1 < 1 or n2 < 1:
+        return np.nan
+    sd1, sd2 = a.std(ddof=1), b.std(ddof=1)
+    return math.sqrt((sd1**2)/n1 + (sd2**2)/n2)
+
+# ---- 4. Varianzhomogenität testen (Levene-Test) ----
+print("\n--- Test auf Varianzhomogenität (Levene-Test) ---")
+lev_h   = levene(df_a['humanness'].dropna(),    df_b['humanness'].dropna())
+lev_s   = levene(df_a['social'].dropna(),       df_b['social'].dropna())
+lev_sat = levene(df_a['satisfaction'].dropna(), df_b['satisfaction'].dropna())
+print("Perceived Humanness:  p =", round(lev_h.pvalue,3))
+print("Social Presence:      p =", round(lev_s.pvalue,3))
+print("Satisfaction:         p =", round(lev_sat.pvalue,3))
+
+# ---- 5. Einseitige t-Tests (Treatment A > Control B) ----
+print("\n--- Einseitige t-Tests (Treatment A > Control B) ---")
+t_h   = ttest_ind(df_a['humanness'].dropna(),    df_b['humanness'].dropna(),
+                  alternative='greater', equal_var=True)
+t_s   = ttest_ind(df_a['social'].dropna(),       df_b['social'].dropna(),
+                  alternative='greater', equal_var=True)
+t_sat = ttest_ind(df_a['satisfaction'].dropna(), df_b['satisfaction'].dropna(),
+                  alternative='greater', equal_var=True)
+
+# ---- 6. Deskriptive Statistiken (inkl. SE) ----
+def report(name, col):
+    a = _clean(df_a[col]); b = _clean(df_b[col])
+    m_a, s_a, n_a = a.mean(), a.std(ddof=1), len(a)
+    m_b, s_b, n_b = b.mean(), b.std(ddof=1), len(b)
+    se_a, se_b = se_mean(a), se_mean(b)
+    print(f"{name}:\n"
+          f"  Gruppe A (Treatment) M = {m_a:.2f}, SD = {s_a:.2f}, SE = {se_a:.2f}, n = {n_a}\n"
+          f"  Gruppe B (Control)   M = {m_b:.2f}, SD = {s_b:.2f}, SE = {se_b:.2f}, n = {n_b}")
+
+print("\n--- Deskriptive Statistiken ---")
+report("Perceived Humanness", "humanness")
+report("Social Presence", "social")
+report("Satisfaction", "satisfaction")
+
+# ---- 7. Testergebnisse ausgeben (inkl. SE der Differenz) ----
+print("\n--- Testergebnisse ---")
+def show_test(name, col, t_res):
+    sed = se_diff_welch(df_a[col], df_b[col])
+    diff = _clean(df_a[col]).mean() - _clean(df_b[col]).mean()
+    print(f"{name}:  t = {t_res.statistic:.2f}, p = {t_res.pvalue:.3f}, "
+          f"Mean Diff = {diff:.2f}, SE(Diff) = {sed:.2f}")
+
+show_test("Perceived Humanness", "humanness", t_h)
+show_test("Social Presence",     "social",     t_s)
+show_test("Satisfaction",        "satisfaction", t_sat)
+
+# -------- Skalen-Reliabilität & Itemanalyse (PCA-Approx) --------
+def compute_cr_ave_pca(data, items):
+    data_items = data[items].dropna()
+    pca = PCA(n_components=1)
+    pca.fit((data_items - data_items.mean())/data_items.std(ddof=0))  # standardisieren
+    loadings = np.abs(pca.components_[0])
+    sum_loadings = np.sum(loadings)
+    sum_loadings_squared = sum_loadings ** 2
+    sum_error = np.sum(1 - loadings ** 2)
+    CR = sum_loadings_squared / (sum_loadings_squared + sum_error)
+    AVE = np.mean(loadings ** 2)
+    return CR, AVE
+
+def cronbach_alpha(df):
+    k = df.shape[1]
+    variances = df.var(axis=0, ddof=1)
+    total_var = df.sum(axis=1).var(ddof=1)
+    return (k / (k-1)) * (1 - variances.sum() / total_var)
+
+def item_analysis(df, skala_name):
+    print(f"\n--- {skala_name} ---")
+    print(f"Cronbach's Alpha: {cronbach_alpha(df):.2f}")
+    print("Item-Gesamtkorrelationen und Alpha if item deleted:")
+    for col in df.columns:
+        others = [c for c in df.columns if c != col]
+        rest_sum = df[others].sum(axis=1)
+        correlation = np.corrcoef(df[col], rest_sum)[0, 1]
+        alpha_if_deleted = cronbach_alpha(df[others])
+        print(f"- {col[:60]}...:  r_item = {correlation:.2f}, Alpha if deleted = {alpha_if_deleted:.2f}")
+
+# ---- Beide Gruppen zusammenfügen für Reliabilität ----
+all_data = pd.concat([df_a, df_b], axis=0)
+
+for name, cols in [
+    ('Perceived Humanness (9-stufig)', humanness_cols),
+    ('Social Presence (7-stufig)', social_cols),
+    ('Satisfaction (7-stufig)', satisfaction_cols)
+]:
+    cr, ave = compute_cr_ave_pca(all_data, cols)
+    print(f"\n{name}:\n  Composite Reliability (PCA-Approx): {cr:.2f}\n  Average Variance Extracted (PCA-Approx): {ave:.2f}")
+    item_analysis(all_data[cols].dropna(), name)
+
+# --------- Cohen's d für alle Skalen ---------
+def cohens_d(m1, m2, sd1, sd2, n1, n2):
+    pooled_sd = np.sqrt(((n1-1)*sd1**2 + (n2-1)*sd2**2) / (n1+n2-2))
+    d = (m1 - m2) / pooled_sd
+    return d
+
+print("\n--- Effektgrößen (Cohen's d, Treatment A vs. Control B) ---")
+for label, col in [
+    ("Perceived Humanness", "humanness"),
+    ("Social Presence", "social"),
+    ("Satisfaction", "satisfaction")
+]:
+    a = _clean(df_a[col]); b = _clean(df_b[col])
+    m1, s1, n1 = a.mean(), a.std(ddof=1), len(a)
+    m2, s2, n2 = b.mean(), b.std(ddof=1), len(b)
+    d = cohens_d(m1, m2, s1, s2, n1, n2)
+    print(f"{label}: d = {d:.2f}")
+
+# ================== CFA (semopy) + CR/AVE nach Fornell-Larcker ==================
+if RUN_CFA:
+    try:
+        from semopy import Model, calc_stats
+
+        # --- kompatible Parameter-Inspektion für verschiedene semopy-Versionen ---
+        def _inspect_params(mod):
+            """
+            Gibt ein DataFrame mit Spalten: lval, op, rval, est zurück.
+            Funktioniert mit neueren und älteren semopy-Versionen.
+            """
+            df = None
+            if hasattr(mod, "inspect"):
+                try:
+                    df = mod.inspect()
+                except TypeError:
+                    df = mod.inspect(std_est=False)
+            if df is None:
+                try:
+                    from semopy import inspector
+                    df = inspector.inspect(mod)
+                except Exception:
+                    pass
+            if df is None and hasattr(mod, "parameters_dataframe"):
+                df = mod.parameters_dataframe
+            if df is None:
+                raise AttributeError("Konnte Parameter aus dem semopy-Model nicht extrahieren.")
+
+            # Spalten vereinheitlichen
+            cols_lower = {c.lower(): c for c in df.columns}
+            def pick(*cands):
+                for c in cands:
+                    if c in cols_lower:
+                        return cols_lower[c]
+                raise KeyError(f"Spalte fehlt: {cands}")
+
+            lval = pick('lval', 'lhs')
+            op   = pick('op')
+            rval = pick('rval', 'rhs')
+            estc = pick('est', 'estimate', 'Est', 'Estimate', 'value', 'Value')
+
+            out = df[[lval, op, rval, estc]].copy()
+            out.columns = ['lval', 'op', 'rval', 'est']
+            return out
+
+        def run_cfa_cr_ave(df_in, label="Alle Daten"):
+            # Spalten prüfen
+            all_items = humanness_cols + social_cols + satisfaction_cols
+            missing = [c for c in all_items if c not in df_in.columns]
+            if missing:
+                print(f"\n[CFA {label}] Fehlende Spalten – übersprungen: {missing}")
+                return
+
+            X = df_in[all_items].dropna().copy()
+            if X.empty:
+                print(f"\n[CFA {label}] Keine vollständigen Fälle – übersprungen.")
+                return
+
+            # Aliase
+            alias = {}
+            for i, col in enumerate(humanness_cols, start=1):    alias[f"PH{i}"]  = col
+            for i, col in enumerate(social_cols, start=1):       alias[f"SP{i}"]  = col
+            for i, col in enumerate(satisfaction_cols, start=1): alias[f"SAT{i}"] = col
+
+            X_alias = X.rename(columns={v: k for k, v in alias.items()})
+            # Standardisieren (Est ≈ std. Ladungen)
+            X_std = (X_alias - X_alias.mean()) / X_alias.std(ddof=0)
+
+            model_desc = """
+            PH =~ PH1 + PH2 + PH3 + PH4 + PH5 + PH6
+            SP =~ SP1 + SP2 + SP3 + SP4 + SP5
+            SAT =~ SAT1 + SAT2 + SAT3
+            """
+
+            mod = Model(model_desc)
+            mod.fit(X_std)
+
+            # Fit-Indizes
+            stats = calc_stats(mod)
+
+            # Parameter extrahieren
+            params = _inspect_params(mod)
+
+            # Mess-Ladungen
+            loads = params[params["op"].isin(["~", "=~"]) & params["lval"].isin(X_alias.columns)].copy()
+
+            # Residualvarianzen
+            resid = params[(params["op"] == "~~") &
+                           (params["lval"] == params["rval"]) &
+                           (params["lval"].isin(X_alias.columns))].copy()
+
+            def cr_ave(latent, indicators):
+                subL = loads[loads["rval"] == latent].set_index("lval").reindex(indicators)
+                lambdas = subL["est"].astype(float).values
+                # Residuen ggf. aus Parametern, sonst 1-λ²
+                if not resid.empty:
+                    subR = resid.set_index("lval").reindex(indicators)
+                    if subR["est"].notna().all():
+                        theta = subR["est"].astype(float).values
+                    else:
+                        theta = 1 - lambdas**2
+                else:
+                    theta = 1 - lambdas**2
+                CR  = (lambdas.sum()**2) / ((lambdas.sum()**2) + theta.sum())
+                AVE = (np.sum(lambdas**2)) / (np.sum(lambdas**2) + theta.sum())
+                return CR, AVE, lambdas, theta
+
+            cr_ph, ave_ph, lam_ph, th_ph       = cr_ave("PH",  [f"PH{i}" for i in range(1,7)])
+            cr_sp, ave_sp, lam_sp, th_sp       = cr_ave("SP",  [f"SP{i}" for i in range(1,6)])
+            cr_sat, ave_sat, lam_sat, th_sat   = cr_ave("SAT", [f"SAT{i}" for i in range(1,4)])
+
+            print(f"\n=== CFA ({label}) ===")
+            try:
+                print(f"n = {X_std.shape[0]}; Chi2={stats.chi2:.2f}, df={stats.df}, p={stats.p_value:.3f}, "
+                      f"CFI={stats.cfi:.3f}, TLI={stats.tli:.3f}, RMSEA={stats.rmsea:.3f}, SRMR={stats.srmr:.3f}")
+            except Exception:
+                print(f"n = {X_std.shape[0]} (Fit-Indizes: semopy-Version mit abweichenden Feldnamen)")
+
+            def show_block(name, CR, AVE, lambdas, theta):
+                print(f"{name}: CR={CR:.3f}, AVE={AVE:.3f}")
+                print(f"  Ladungen: {np.round(lambdas,3).tolist()}")
+                print(f"  Theta:    {np.round(theta,3).tolist()}")
+
+            show_block("Perceived Humanness", cr_ph, ave_ph, lam_ph, th_ph)
+            show_block("Social Presence",     cr_sp, ave_sp, lam_sp, th_sp)
+            show_block("Satisfaction",        cr_sat, ave_sat, lam_sat, th_sat)
+
+        if CFA_BY_GROUP:
+            if len(df_a) > 0:
+                run_cfa_cr_ave(df_a, label="Gruppe A")
+            if len(df_b) > 0:
+                run_cfa_cr_ave(df_b, label="Gruppe B")
+        else:
+            all_for_cfa = pd.concat([df_a, df_b], axis=0)
+            run_cfa_cr_ave(all_for_cfa, label="A+B zusammen")
+
+    except ImportError:
+        print("\nHinweis: Für die CFA bitte zuerst installieren:\n  pip install semopy")
+    except Exception as e:
+        print("\nUnerwarteter Fehler bei der CFA:", str(e))
