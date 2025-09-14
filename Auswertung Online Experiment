@@ -1,0 +1,105 @@
+=== Auswertung Online Experiment ===
+Sprache-Filter: Alle
+t-Test-Alternative: Einseitig (A>B)
+Alpha-Level für Levene/Varianztest: 0.05
+
+
+=== Gruppenvergleiche mit Auto-Switch (Student ↔ Welch) und ein-/zweiseitig ===
+
+— Perceived Humanness —
+  Deskriptiv:
+    Gruppe A (Treatment): M=5.28, SD=1.45, n=38
+    Gruppe B (Control):   M=5.43, SD=1.62, n=37
+  Levene: W=0.22, p=0.640
+  -> Auto-Switch Wahl: Student-t (equal_var=True)
+  t-Test (einseitig, A>B): t=-0.43, p=0.665
+  Effektgröße: Cohen's d = -0.10
+
+— Social Presence —
+  Deskriptiv:
+    Gruppe A (Treatment): M=2.48, SD=1.52, n=38
+    Gruppe B (Control):   M=2.69, SD=1.47, n=37
+  Levene: W=0.06, p=0.812
+  -> Auto-Switch Wahl: Student-t (equal_var=True)
+  t-Test (einseitig, A>B): t=-0.60, p=0.724
+  Effektgröße: Cohen's d = -0.14
+
+— Satisfaction —
+  Deskriptiv:
+    Gruppe A (Treatment): M=4.11, SD=1.36, n=38
+    Gruppe B (Control):   M=4.17, SD=1.52, n=37
+  Levene: W=0.34, p=0.561
+  -> Auto-Switch Wahl: Student-t (equal_var=True)
+  t-Test (einseitig, A>B): t=-0.17, p=0.568
+  Effektgröße: Cohen's d = -0.04
+
+— Chatbot-Nutzung (Mittel 2 Items) —
+  Deskriptiv:
+    Gruppe A (Treatment): M=2.00, SD=1.13, n=38
+    Gruppe B (Control):   M=1.86, SD=1.18, n=37
+  Levene: W=0.09, p=0.763
+  -> Auto-Switch Wahl: Student-t (equal_var=True)
+  t-Test (einseitig, A>B): t=0.51, p=0.307
+  Effektgröße: Cohen's d = 0.12
+
+— Komfort (Single-Item) —
+  Deskriptiv:
+    Gruppe A (Treatment): M=5.58, SD=1.83, n=38
+    Gruppe B (Control):   M=5.30, SD=2.01, n=37
+  Levene: W=0.15, p=0.698
+  -> Auto-Switch Wahl: Student-t (equal_var=True)
+  t-Test (einseitig, A>B): t=0.64, p=0.264
+  Effektgröße: Cohen's d = 0.15
+
+
+--- Perceived Humanness (6 Items, 9-stufig) ---
+Cronbach's Alpha: 0.89
+Item-Gesamtkorrelationen und Alpha if item deleted:
+- Wie haben Sie die Menschlichkeit des Coaching-Chatbots wahrg...:  r_item = 0.70, Alpha if deleted = 0.88
+- Wie haben Sie die Gesprächsfähigkeit des Coaching-Chatbots w...:  r_item = 0.86, Alpha if deleted = 0.85
+- Wie haben Sie die Bedachtheit des Coaching-Chatbots wahrgeno...:  r_item = 0.78, Alpha if deleted = 0.86
+- Wie haben Sie die Höflichkeit des Coaching-Chatbots wahrgeno...:  r_item = 0.40, Alpha if deleted = 0.91
+- Wie haben Sie das Antwortverhalten des Coaching-Chatbots wah...:  r_item = 0.79, Alpha if deleted = 0.86
+- Wie haben Sie die Interaktion mit dem Coaching-Chatbot wahrg...:  r_item = 0.74, Alpha if deleted = 0.87
+
+
+--- Social Presence (5 Items, 7-stufig) ---
+Cronbach's Alpha: 0.93
+Item-Gesamtkorrelationen und Alpha if item deleted:
+- Ich hatte das Gefühl, mit dem Coaching-Chatbot einen menschl...:  r_item = 0.78, Alpha if deleted = 0.93
+- Ich hatte das Gefühl, mit dem Coaching-Chatbot eine persönli...:  r_item = 0.80, Alpha if deleted = 0.92
+- Ich hatte das Gefühl, mit dem Coaching-Chatbot eine gesellig...:  r_item = 0.77, Alpha if deleted = 0.93
+- Ich hatte das Gefühl, mit dem Coaching-Chatbot menschliche W...:  r_item = 0.91, Alpha if deleted = 0.90
+- Ich hatte das Gefühl, mit dem Coaching-Chatbot menschliche S...:  r_item = 0.86, Alpha if deleted = 0.91
+
+--- Satisfaction (3 Items, 7-stufig) ---
+Cronbach's Alpha: 0.87
+Item-Gesamtkorrelationen und Alpha if item deleted:
+- Wie zufrieden sind Sie mit der allgemeinen Interaktion mit d...:  r_item = 0.82, Alpha if deleted = 0.74
+- Wie zufrieden sind Sie mit den Ratschlägen des Chatbots?...:  r_item = 0.74, Alpha if deleted = 0.82
+- Wie zufrieden sind Sie mit der Art, wie der Chatbot Sie beha...:  r_item = 0.68, Alpha if deleted = 0.87
+
+--- Chatbot-Nutzung (2 Items) ---
+Inter-Item r = 0.288
+Cronbach's alpha (2 Items) = 0.448
+
+--- Effektgrößen (Cohen's d, Treatment A vs. Control B) ---
+Perceived Humanness: d = -0.10
+Social Presence: d = -0.14
+Satisfaction: d = -0.04
+Chatbot-Nutzung (Mittel): d = 0.12
+Komfort (Single): d = 0.15
+
+=== CFA (A+B zusammen) ===
+n = 74 (Fit-Indizes: semopy-Version mit abweichenden Feldnamen)
+Perceived Humanness: CR=0.936, AVE=0.718
+  Ladungen: [1.0, 1.171, 1.011, 0.508, 1.113, 1.084]
+  Theta:    [0.404, 0.184, 0.391, 0.846, 0.262, 0.3]
+Social Presence: CR=0.956, AVE=0.812
+  Ladungen: [1.0, 0.997, 0.98, 1.137, 1.11]
+  Theta:    [0.319, 0.322, 0.345, 0.119, 0.16]
+Satisfaction: CR=0.885, AVE=0.722
+  Ladungen: [1.0, 0.858, 0.775]
+  Theta:    [0.101, 0.338, 0.46]
+
+
