@@ -1,0 +1,48 @@
+=== Auswertung der drei Vignetten ===
+Sprache-Filter: Alle
+
+=== Welch-t-Tests (einseitig (A < B usw.)), paarweise A-B, A-C, B-C ===
+Alpha: 0.05
+
+
+=== Welch-t-Tests ===
+           Variable Vergleich    N_A   M_A  SD_A    N_B   M_B  SD_B  t (Welch)  p (einseitig (A < B usw.))  Hedges_g    N_C   M_C  SD_C
+Perceived Humanness    A vs B 16.000 5.958 1.008 10.000 6.550 1.136     -1.348                       0.097    -0.542    NaN   NaN   NaN
+Perceived Humanness    A vs C 16.000 5.958 1.008    NaN   NaN   NaN     -0.449                       0.329    -0.165 13.000 6.141 1.150
+Perceived Humanness    B vs C    NaN   NaN   NaN 10.000 6.550 1.136      0.851                       0.798     0.345 13.000 6.141 1.150
+    Social Presence    A vs B 16.000 2.963 1.130 10.000 4.560 1.010     -3.747                       0.001    -1.424    NaN   NaN   NaN
+    Social Presence    A vs C 16.000 2.963 1.130    NaN   NaN   NaN     -0.661                       0.258    -0.252 13.000 3.354 1.875
+    Social Presence    B vs C    NaN   NaN   NaN 10.000 4.560 1.010      1.977                       0.969     0.743 13.000 3.354 1.875
+       Satisfaction    A vs B 16.000 4.646 0.890 10.000 5.233 1.055     -1.465                       0.081    -0.596    NaN   NaN   NaN
+       Satisfaction    A vs C 16.000 4.646 0.890    NaN   NaN   NaN      0.064                       0.525     0.024 13.000 4.615 1.514
+       Satisfaction    B vs C    NaN   NaN   NaN 10.000 5.233 1.055      1.152                       0.869     0.446 13.000 4.615 1.514
+    Chatbot-Nutzung    A vs B 16.000 1.594 1.381 10.000 1.700 0.823     -0.246                       0.404    -0.086    NaN   NaN   NaN
+    Chatbot-Nutzung    A vs C 16.000 1.594 1.381    NaN   NaN   NaN     -0.249                       0.403    -0.091 13.000 1.731 1.549
+    Chatbot-Nutzung    B vs C    NaN   NaN   NaN 10.000 1.700 0.823     -0.061                       0.476    -0.023 13.000 1.731 1.549
+   Komfort (Single)    A vs B 16.000 5.500 1.789 10.000 6.300 1.767     -1.118                       0.139    -0.435    NaN   NaN   NaN
+   Komfort (Single)    A vs C 16.000 5.500 1.789    NaN   NaN   NaN     -0.537                       0.298    -0.193 13.000 5.846 1.676
+   Komfort (Single)    B vs C    NaN   NaN   NaN 10.000 6.300 1.767      0.624                       0.730     0.255 13.000 5.846 1.676
+
+=== Deskriptive Statistik ===
+           Variable Gruppe  n     M    SD
+    Chatbot-Nutzung      A 16 1.594 1.381
+    Chatbot-Nutzung      B 10 1.700 0.823
+    Chatbot-Nutzung      C 13 1.731 1.549
+   Komfort (Single)      A 16 5.500 1.789
+   Komfort (Single)      B 10 6.300 1.767
+   Komfort (Single)      C 13 5.846 1.676
+Perceived Humanness      A 16 5.958 1.008
+Perceived Humanness      B 10 6.550 1.136
+Perceived Humanness      C 13 6.141 1.150
+       Satisfaction      A 16 4.646 0.890
+       Satisfaction      B 10 5.233 1.055
+       Satisfaction      C 13 4.615 1.514
+    Social Presence      A 16 2.963 1.130
+    Social Presence      B 10 4.560 1.010
+    Social Presence      C 13 3.354 1.875
+
+=== Demographische Übersicht ===
+Gruppe  M_Alter  SD_Alter  n_Chatbot Nutzung  n_Coaching Nutzung
+     A    36.81     12.16                 16                  16
+     B    35.60     12.87                 10                  10
+     C    33.08     12.82                 13                  13
