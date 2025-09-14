@@ -1,0 +1,182 @@
+import gradio as gr
+import threading
+import os
+from collections import Counter
+import tempfile
+
+LINKS = ["https://www.umfrageonline.com/c/e7hibb9p",
+         "https://www.umfrageonline.com/c/rsvvzpew"]
+
+_counter = 0
+_lock = threading.Lock()
+
+COUNTER_FILE = "counter.txt"
+if os.path.exists(COUNTER_FILE):
+    try:
+        with open(COUNTER_FILE, "r") as f:
+            _counter = int((f.read() or "0").strip())
+    except:
+        _counter = 0
+
+def get_and_increment_url():
+    """Gibt die nächste URL im globalen Round-Robin zurück (threadsafe) und persistiert den Zähler)."""
+    global _counter
+    with _lock:
+        url = LINKS[_counter % len(LINKS)]
+        _counter += 1
+        try:
+            with open(COUNTER_FILE, "w") as f:
+                f.write(str(_counter))
+        except:
+            pass
+    return url
+
+def next_redirect_html():
+    url = get_and_increment_url()
+    return f"""
+    <html><head>
+      <meta http-equiv="refresh" content="0;url={url}">
+    </head>
+    <body style="font-family:system-ui; padding:1rem; text-align:center;">
+      Redirecting… If nothing happens, <a href="{url}">click here</a>.
+    </body></html>
+    """
+
+with gr.Blocks(css="""
+    .intro {
+        font-family: system-ui;
+        max-width: 600px;
+        margin: auto;
+        text-align: center;
+        padding: 1rem;
+    }
+    .intro h2 {
+        margin: 0.5rem 0;
+    }
+    .intro p {
+        font-size: 1.1rem;
+        line-height: 1.4;
+    }
+    /* Eigene Klasse für den Button */
+    .green-btn {
+        background-color: #5e9e00 !important;
+        color: white !important;
+        font-size: 1.2rem !important;
+        padding: 0.75rem 1.5rem !important;
+        border-radius: 8px !important;
+        border: none !important;
+        cursor: pointer !important;
+        width: auto;
+    }
+    .green-btn:hover {
+        background-color: #88c716 !important;
+    }
+    @media (max-width: 480px) {
+        .intro p {
+            font-size: 1rem;
+        }
+        .green-btn {
+            width: 100% !important;
+            font-size: 1rem !important;
+        }
+    }
+    #datenschutz-accordion {
+    font-size: 1.1rem;
+    font-weight: bold;
+    background-color: #444; /* dunkler Hintergrund */
+    color: white;
+    border-radius: 8px;
+}
+#datenschutz-accordion:hover {
+    background-color: #5e9e00; /* grün beim Hover */
+}
+""") as demo:
+
+    gr.HTML("""
+    <div class="intro">
+       <h2 class="welcome-title">Welcome & Thank You for Your Time</h2>
+       <p>
+         This link distributor is part of my Bachelor's thesis research.<br>
+         By tapping the button below, you will be randomly redirected to one version of my survey.<br>
+         Your participation is greatly appreciated.
+       </p>
+       <h2 class="thanks-title">Thank you so much for participating 🐾</h2>
+    </div>
+    """)
+
+    btn = gr.Button("Go to Survey", elem_classes="green-btn")
+    out = gr.HTML()
+
+    with gr.Accordion("🔒 Datenschutz", open=False):
+        gr.Markdown("""
+**Datenschutzerklärung für den Linkverteiler im Rahmen der Bachelorarbeit**
+
+Verantwortlich für die Datenverarbeitung:  
+***Verantwortlich für Inhalt und Durchführung der Umfrage**  
+Sophia Piyamit  
+Studierende im Studiengang Angewandte Informatik  
+Hochschule für Technik und Wirtschaft (HTW) Berlin  
+Wilhelminenhofstraße 75A  
+12459 Berlin  
+Deutschland
+
+E-Mail: [sophia.piyamit@student.htw-berlin.de]*  
+(nach Art. 4 Nr. 7 DSGVO)
+
+**Zweck der Verarbeitung**  
+Diese Anwendung verteilt eingehende Aufrufe gleichmäßig auf zwei verschiedene Umfragelinks, um eine gleichmäßige Teilnahme an zwei Versionen meiner wissenschaftlichen Umfrage zu gewährleisten.
+
+**Art der verarbeiteten Daten**  
+Beim Aufruf dieser Seite werden aus technischen Gründen vorübergehend folgende Daten verarbeitet:  
+- IP-Adresse  
+- Browsertyp und -version  
+- Betriebssystem  
+- Datum und Uhrzeit des Zugriffs  
+- aufgerufene URL
+
+Diese Verarbeitung erfolgt ausschließlich zur technischen Bereitstellung und zum sicheren Betrieb der Anwendung. Eine dauerhafte Speicherung oder Auswertung dieser Daten findet nicht statt.
+
+**Zählfunktion**  
+Für die Verteilungslogik wird ein nicht-personenbezogener Zählerstand gespeichert. Dieser enthält keine IP-Adresse oder sonstige identifizierende Merkmale.
+
+**Weiterleitung zu UmfrageOnline**  
+Durch Klick auf den Button „Go to Survey“ werden Sie zu einer externen Umfrage bei **UmfrageOnline** (Anbieter: enuvo GmbH, Schweiz) weitergeleitet.  
+Dort werden vor Beginn der Umfrage umfassende Informationen zur Datenverarbeitung bereitgestellt und Ihre Einwilligung eingeholt.  
+Die Datenschutzerklärung von UmfrageOnline finden Sie hier: [https://www.umfrageonline.com/datenschutz](https://www.umfrageonline.com/datenschutz)
+
+**Rechtsgrundlage**  
+Die Verarbeitung der Verbindungsdaten erfolgt auf Grundlage von Art. 6 Abs. 1 lit. f DSGVO (berechtigtes Interesse an der technischen Funktionsfähigkeit). Die Teilnahme an der Umfrage erfolgt auf Grundlage Ihrer Einwilligung nach Art. 6 Abs. 1 lit. a DSGVO, die Sie direkt bei UmfrageOnline erteilen.
+
+**Ihre Rechte**  
+Sie haben das Recht auf Auskunft, Berichtigung, Löschung, Einschränkung der Verarbeitung sowie das Recht auf Datenübertragbarkeit. Außerdem können Sie eine erteilte Einwilligung jederzeit mit Wirkung für die Zukunft widerrufen.
+
+**Kontakt für Datenschutzanfragen**  
+Für Fragen oder zur Geltendmachung Ihrer Rechte wenden Sie sich bitte an die oben genannten Kontaktdaten.
+""")
+
+    btn.click(fn=next_redirect_html, outputs=out)
+
+demo.launch(share=True)
+
+# ----------------------------------------------------
+# TEST: Gleichmäßige Verteilung der beiden Links prüfen
+# ----------------------------------------------------
+def test_equal_distribution():
+    global _counter, COUNTER_FILE
+    _counter = 0
+    tmp = tempfile.TemporaryDirectory()
+    COUNTER_FILE = os.path.join(tmp.name, "counter.txt")
+
+    N = 1000  # gerade Zahl
+    seen = [get_and_increment_url() for _ in range(N)]
+    counts = Counter(seen)
+
+    print("Test result:", counts)
+    assert len(counts) == 2, "Es müssen genau zwei verschiedene Links sein."
+    assert counts[LINKS[0]] == N // 2, f"{LINKS[0]} hat falsche Anzahl."
+    assert counts[LINKS[1]] == N // 2, f"{LINKS[1]} hat falsche Anzahl."
+    print("✅ Gleichmäßige Verteilung bestätigt.")
+
+# Test nur ausführen, wenn Datei direkt gestartet wird
+if __name__ == "__main__":
+    test_equal_distribution()
