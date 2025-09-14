@@ -1,4 +1,5 @@
 # BACodeBase
+In diesem Repo finden sich alle Daten aus dem Code und der Code selbst.
 
 # Delphi – SFBT-Coach (Gradio + OpenAI)
 
